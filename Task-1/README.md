@@ -23,24 +23,24 @@ This is a task which aims for me to understand Docker better for the main tasks 
 
 - Screenshots of docker containers, frontend and backend container logs
 
-### Screenshot 1
+### Containers
 ![Containers](screenshots/containers.png)
 
-### Screenshot 2
+### Container Infos
 ![Container Infos](screenshots/containerinfo.png)
 
-### Screenshot 3
+### Backend Container logs
 ![Backend Container logs](screenshots/backendlogs.png)
 
-### Screenshot 4
+### Frontend Container logs
 ![Frontend Container logs](screenshots/frontendlogs.png)
 
-### Screenshot 5
+### Main UI
 ![Main UI](screenshots/ui.png)
 
 ---
 
 ## Issues Faced & Fixes
 
-Mainly I was trying to create the setup from scratch which was exhausting and that was the main issue . Now from the next task I think it will be better to create the setup using the environment commands instead of relying for it to work when the docker compose is up. This will basically allow me to debug better and also since the image will finally be created, it will still fullfill its purpose of containerisation.
+- Mainly I was trying to create the setup from scratch which was exhausting and that was the main issue . Now from the next task I think it will be better to create the setup using the environment commands instead of relying for it to work when the docker compose is up. This will basically allow me to debug better and also since the image will finally be created, it will still fullfill its purpose of containerisation.
 ---
