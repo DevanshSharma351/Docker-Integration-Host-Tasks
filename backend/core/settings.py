@@ -10,10 +10,32 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables from repo root .env
+load_dotenv(BASE_DIR.parent / ".env")
+
+
+def get_env(name: str) -> str:
+    value = os.getenv(name)
+    if value is None or value == "":
+        raise ImproperlyConfigured(f"Missing required env var: {name}")
+    return value
+
+
+def get_bool_env(name: str) -> bool:
+    return get_env(name).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_list_env(name: str) -> list[str]:
+    return [item.strip() for item in get_env(name).split(",") if item.strip()]
 
 
 # Quick-start development settings - unsuitable for production
@@ -23,9 +45,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-te&ou5qu*=p=dg_s96^#tb7xwegvzz@l&(m!kwnigflsa1pg#*'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = get_bool_env("DJANGO_DEBUG")
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = get_list_env("DJANGO_ALLOWED_HOSTS")
 
 
 # Application definition
@@ -39,6 +61,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'authentication',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
 ]
 
@@ -77,9 +100,13 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": get_env("POSTGRES_DB"),
+        "USER": get_env("POSTGRES_USER"),
+        "PASSWORD": get_env("POSTGRES_PASSWORD"),
+        "HOST": get_env("POSTGRES_HOST"),
+        "PORT": get_env("POSTGRES_PORT"),
     }
 }
 
@@ -121,3 +148,28 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+
+# Custom User Model
+AUTH_USER_MODEL = 'authentication.User'
+
+# REST Framework Configuration
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
+# JWT Configuration
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}

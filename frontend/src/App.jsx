@@ -1,35 +1,50 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './components/Login';
+import Register from './components/Register';
+import Dashboard from './components/Dashboard';
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const { user, loading } = useAuth();
+  const [showRegister, setShowRegister] = useState(false);
+
+  if (loading) {
+    return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-100 py-8">
+        <div className="text-center mb-4">
+          <h1 className="text-3xl font-bold mb-2">Docker Integration Host</h1>
+          <p className="text-gray-600">Manage containers across multiple hosts</p>
+        </div>
+        
+        <div className="text-center mb-4">
+          <button
+            onClick={() => setShowRegister(!showRegister)}
+            className="text-blue-500 underline"
+          >
+            {showRegister ? 'Already have an account? Login' : "Don't have an account? Register"}
+          </button>
+        </div>
+
+        {showRegister ? <Register /> : <Login />}
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="min-h-screen bg-gray-100">
+      <Dashboard />
+    </div>
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
