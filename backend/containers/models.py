@@ -11,7 +11,7 @@ from datetime import timedelta
 # When Module 1's 'hosts' app is merged:
 #   1. Delete this class
 #   2. Change ForeignKey below from 'containers.Host' to 'hosts.Host'
-#   3. Run makemigrations
+#   3. Run makemigrations 
 # ─────────────────────────────────────────────────────────────────────────
 class Host(models.Model):
     name       = models.CharField(max_length=255)
@@ -24,8 +24,6 @@ class Host(models.Model):
     def __str__(self):
         return f"{self.name} ({self.ip_address}:{self.port})"
 
-
-# ── CONTAINER RECORD ──────────────────────────────────────────────────────
 class ContainerRecord(models.Model):
 
     class Status(models.TextChoices):
@@ -68,8 +66,6 @@ class ContainerRecord(models.Model):
     def __str__(self):
         return f"{self.name} [{self.status}]"
 
-
-# ── CONTAINER LIFECYCLE EVENT ─────────────────────────────────────────────
 class ContainerLifecycleEvent(models.Model):
 
     class Action(models.TextChoices):
@@ -110,8 +106,6 @@ class ContainerLifecycleEvent(models.Model):
     def __str__(self):
         return f"{self.action} → {self.status} @ {self.timestamp}"
 
-
-# ── EXEC TICKET ───────────────────────────────────────────────────────────
 class ExecTicket(models.Model):
 
     id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
