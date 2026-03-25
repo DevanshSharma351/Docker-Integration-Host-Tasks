@@ -15,8 +15,6 @@ from containers.models import ContainerRecord, ContainerLifecycleEvent, ExecTick
 from containers.docker_client import get_docker_client
 
 
-# ── INTERNAL HELPERS ──────────────────────────────────────────────────────
-
 def _log_event(container, user, action, success, error=None):
     """
     Always call this after every SDK action — success or failure.

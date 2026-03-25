@@ -1,6 +1,13 @@
 import docker
 from docker.errors import DockerException
-from rest_framework.exceptions import ServiceUnavailable
+from rest_framework.exceptions import APIException
+from rest_framework import status
+
+
+class ServiceUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = 'Docker host is unreachable.'
+    default_code = 'service_unavailable'
 
 
 def get_docker_client(host):
