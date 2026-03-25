@@ -17,7 +17,16 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 
+from images.views import ImageInspectView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('authentication.urls')),
+    path('api/users/', include('users.urls')),
+    path('api/hosts/', include('hosts.urls')),
+    path('api/networks/', include('networks.urls')),
+    path('api/containers/', include('containers.urls')),
+    path('api/registries/', include('registries.urls')),
+    path('api/hosts/<int:host_id>/images/pull/', include('images.urls')),
+    path('api/hosts/<int:host_id>/images/inspect/', ImageInspectView.as_view(), name='image-inspect'),
 ]
