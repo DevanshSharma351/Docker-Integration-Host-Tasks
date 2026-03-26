@@ -79,10 +79,6 @@ def create_container(host, user, image_ref, name, environment,
 
 
 def remove_container(record, user):
-    """
-    Force removes a container (stops it first if running).
-    Returns error string or None on success.
-    """
     try:
         sdk_container = _get_sdk_container(record)
         sdk_container.remove(force=True)
