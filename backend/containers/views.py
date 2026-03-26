@@ -80,9 +80,22 @@ class ContainerCreateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         except docker.errors.APIError as exc:
-            logger.error('Docker API error creating container on host %s: %s', host.name, exc)
+            explanation = getattr(exc, 'explanation', None) or str(exc)
+            status_code = getattr(exc, 'status_code', None)
+            if isinstance(status_code, int) and 400 <= status_code < 500:
+                logger.warning(
+                    'Docker API client error creating container on host %s: %s',
+                    host.name,
+                    explanation,
+                )
+                return Response(
+                    {'detail': f'Docker API error: {explanation}'},
+                    status=status_code,
+                )
+
+            logger.error('Docker API error creating container on host %s: %s', host.name, explanation)
             return Response(
-                {'detail': f'Docker API error: {exc}'},
+                {'detail': f'Docker API error: {explanation}'},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
