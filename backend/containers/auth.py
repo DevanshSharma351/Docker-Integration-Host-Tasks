@@ -14,25 +14,27 @@ from functools import wraps
 from rest_framework.response import Response
 
 
-class DummyUser:
-    """
-    Fake user for development.
-    Mimics Django's User interface so all code that
-    touches request.user works without a real login.
-    """
-    id             = 1
-    pk             = 1
-    username       = 'dev_user'
-    is_authenticated = True
-    is_active      = True
+# class DummyUser:
+#     """
+#     Fake user for development.
+#     Mimics Django's User interface so all code that
+#     touches request.user works without a real login.
+#     """
+#     id             = 1
+#     pk             = 1
+#     username       = 'dev_user'
+#     is_authenticated = True
+#     is_active      = True
 
-    def __str__(self):
-        return self.username
+#     def __str__(self):
+#         return self.username
 
 
 def get_user_from_request(request):
     """
-    Phase 1/2 — always returns DummyUser.
+    Phase 1/2 — returns a real DB user called 'dev_user'.
+    Creates it on first use if it doesn't exist.
+    This is a real Django User so ForeignKeys work correctly.
 
     Phase 3 — replace this entire body with:
         from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -46,7 +48,13 @@ def get_user_from_request(request):
         except Exception:
             return None
     """
-    return DummyUser()
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    user, _ = User.objects.get_or_create(
+        username='dev_user',
+        defaults={'is_active': True}
+    )
+    return user
 
 
 def check_role(user, host_id, allowed_roles):
