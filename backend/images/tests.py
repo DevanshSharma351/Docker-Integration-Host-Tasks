@@ -1,15 +1,18 @@
 import json
+from io import BytesIO
+from zipfile import ZipFile
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from hosts.models import Host
 from registries.models import RegistryCredential
 
-from .models import ImagePullJob
+from .models import ImageDeleteJob, ImagePullJob, ImagePushJob
 
 User = get_user_model()
 
@@ -557,6 +560,288 @@ class ImagePullJobRouteIntegrationTest(TestCase):
         url = f"{self.base_url}{uuid.uuid4()}/"
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ImageBuildRouteIntegrationTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username="badmin", password="password123", role="admin"
+        )
+        self.host_owner = User.objects.create_user(
+            username="bhoster", password="password123", role="host"
+        )
+        self.viewer = User.objects.create_user(
+            username="bviewer", password="password123", role="viewer"
+        )
+        self.host = Host.objects.create(
+            name="Build Host",
+            hostname="192.168.1.77",
+            port=2375,
+            owner=self.host_owner,
+        )
+        self.url = f"/api/hosts/{self.host.id}/images/build/"
+
+    def _zip_with_dockerfile(self, dockerfile_text: str) -> SimpleUploadedFile:
+        buf = BytesIO()
+        with ZipFile(buf, "w") as archive:
+            archive.writestr("Dockerfile", dockerfile_text)
+            archive.writestr("app.txt", "hello")
+        return SimpleUploadedFile(
+            "context.zip",
+            buf.getvalue(),
+            content_type="application/zip",
+        )
+
+    @patch("images.views.docker.DockerClient")
+    def test_build_with_dockerfile_streams_output(self, MockClient):
+        mock_client = MagicMock()
+        MockClient.return_value = mock_client
+
+        mock_image = MagicMock()
+        mock_image.id = "sha256:build123"
+        mock_logs = iter(
+            [
+                {"stream": "Step 1/1 : FROM alpine\n"},
+                {"stream": "Successfully built\n"},
+            ]
+        )
+        mock_client.images.build.return_value = (mock_image, mock_logs)
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.url,
+            {
+                "dockerfile": "FROM alpine\nRUN echo hi",
+                "tag": "myorg/demo:latest",
+                "pull": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        chunks = [
+            part.decode("utf-8") if isinstance(part, bytes) else part
+            for part in response.streaming_content
+        ]
+        output = "".join(chunks)
+        self.assertIn("Step 1/1", output)
+        self.assertIn("sha256:build123", output)
+
+        MockClient.assert_called_once_with(
+            base_url="tcp://192.168.1.77:2375", timeout=600
+        )
+
+    @patch("images.views.docker.DockerClient")
+    def test_build_with_zip_context_streams_output(self, MockClient):
+        mock_client = MagicMock()
+        MockClient.return_value = mock_client
+
+        mock_image = MagicMock()
+        mock_image.id = "sha256:zipbuild"
+        mock_client.images.build.return_value = (
+            mock_image,
+            iter([{"stream": "Building from zip\n"}]),
+        )
+
+        context_zip = self._zip_with_dockerfile("FROM busybox\nRUN echo zip")
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.url,
+            {
+                "context_zip": context_zip,
+                "tag": "myorg/zip:1",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        chunks = [
+            part.decode("utf-8") if isinstance(part, bytes) else part
+            for part in response.streaming_content
+        ]
+        output = "".join(chunks)
+        self.assertIn("Building from zip", output)
+        self.assertIn("sha256:zipbuild", output)
+
+    def test_build_requires_dockerfile_or_zip(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(self.url, {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+@override_settings(FIELD_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
+class ImagePushDeleteRouteIntegrationTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username="pd_admin", password="password123", role="admin"
+        )
+        self.host_owner = User.objects.create_user(
+            username="pd_owner", password="password123", role="host"
+        )
+        self.viewer = User.objects.create_user(
+            username="pd_viewer", password="password123", role="viewer"
+        )
+        self.host = Host.objects.create(
+            name="PushDelete Host",
+            hostname="192.168.1.60",
+            port=2375,
+            owner=self.host_owner,
+        )
+        self.push_url = f"/api/hosts/{self.host.id}/images/push/"
+        self.delete_url = f"/api/hosts/{self.host.id}/images/delete/"
+
+    @patch("images.views.enqueue_push")
+    def test_create_push_job_as_admin(self, mock_enqueue_push):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.push_url,
+            {
+                "source_image_ref": "alpine:latest",
+                "target_image_ref": "example.registry/alpine:test",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "PENDING")
+        self.assertEqual(response.data["source_image_ref"], "alpine:latest")
+        self.assertEqual(
+            response.data["target_image_ref"], "example.registry/alpine:test"
+        )
+        mock_enqueue_push.assert_called_once()
+        self.assertEqual(ImagePushJob.objects.filter(host=self.host).count(), 1)
+
+    @patch("images.views.enqueue_push")
+    def test_create_push_job_denied_for_viewer(self, mock_enqueue_push):
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.post(
+            self.push_url,
+            {
+                "source_image_ref": "alpine:latest",
+                "target_image_ref": "example.registry/alpine:test",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        mock_enqueue_push.assert_not_called()
+
+    @patch("images.views.enqueue_push")
+    def test_create_push_job_with_credential_owned_by_user(self, mock_enqueue_push):
+        cred = RegistryCredential(
+            owner=self.admin,
+            alias="Push GHCR",
+            registry_url="https://ghcr.io",
+            username="push_user",
+        )
+        cred.token = "push_token"
+        cred.save()
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.push_url,
+            {
+                "source_image_ref": "myorg/app:latest",
+                "target_image_ref": "ghcr.io/myorg/app:ci",
+                "registry_credential": str(cred.id),
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = ImagePushJob.objects.get(pk=response.data["id"])
+        self.assertEqual(created.registry_credential_id, cred.id)
+        mock_enqueue_push.assert_called_once()
+
+    @patch("images.views.enqueue_push")
+    def test_create_push_job_with_foreign_credential_fails(self, mock_enqueue_push):
+        cred = RegistryCredential(
+            owner=self.host_owner,
+            alias="Foreign Cred",
+            registry_url="https://ghcr.io",
+            username="other_user",
+        )
+        cred.token = "other_token"
+        cred.save()
+
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.push_url,
+            {
+                "source_image_ref": "myorg/app:latest",
+                "target_image_ref": "ghcr.io/myorg/app:ci",
+                "registry_credential": str(cred.id),
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_enqueue_push.assert_not_called()
+
+    def test_list_push_jobs(self):
+        ImagePushJob.objects.create(
+            host=self.host,
+            requested_by=self.admin,
+            source_image_ref="alpine:latest",
+            target_image_ref="example.registry/alpine:test",
+        )
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.get(self.push_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    @patch("images.views.enqueue_delete")
+    def test_create_delete_job_unused_as_admin(self, mock_enqueue_delete):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.delete_url,
+            {"delete_mode": "UNUSED", "force": False},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], "PENDING")
+        self.assertEqual(response.data["delete_mode"], "UNUSED")
+        mock_enqueue_delete.assert_called_once()
+        self.assertEqual(ImageDeleteJob.objects.filter(host=self.host).count(), 1)
+
+    @patch("images.views.enqueue_delete")
+    def test_create_delete_job_specific_requires_refs(self, mock_enqueue_delete):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.delete_url,
+            {"delete_mode": "SPECIFIC", "force": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        mock_enqueue_delete.assert_not_called()
+
+    @patch("images.views.enqueue_delete")
+    def test_create_delete_job_specific_as_admin(self, mock_enqueue_delete):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.post(
+            self.delete_url,
+            {
+                "delete_mode": "SPECIFIC",
+                "image_refs": "old:a,old:b",
+                "force": True,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["delete_mode"], "SPECIFIC")
+        self.assertEqual(response.data["image_refs"], "old:a,old:b")
+        mock_enqueue_delete.assert_called_once()
+
+    def test_list_delete_jobs(self):
+        ImageDeleteJob.objects.create(
+            host=self.host,
+            requested_by=self.admin,
+            delete_mode=ImageDeleteJob.DeleteMode.UNUSED,
+            image_refs="",
+        )
+        self.client.force_authenticate(user=self.viewer)
+        response = self.client.get(self.delete_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
 
 
 # --------------------------------------------------------------------------- #
