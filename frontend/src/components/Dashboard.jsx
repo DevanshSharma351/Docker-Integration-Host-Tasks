@@ -1,6 +1,8 @@
 import { useAuth } from '../context/AuthContext';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { imageService } from '../services/imageService';
+import { containerService } from '../services/containerService';
+import ImageGallery from './ImageGallery';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,6 +47,8 @@ import {
   ChevronDown,
   Search,
   Rocket,
+  ImageIcon,
+  Boxes,
 } from 'lucide-react';
 
 export default function Dashboard({ theme, toggleTheme }) {
@@ -59,6 +63,18 @@ export default function Dashboard({ theme, toggleTheme }) {
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState('');
   const [isBuilding, setIsBuilding] = useState(false);
+  const [isLoadingImages, setIsLoadingImages] = useState(false);
+  const [galleryError, setGalleryError] = useState('');
+  const [availableImages, setAvailableImages] = useState([]);
+  const [builtImages, setBuiltImages] = useState([]);
+  const [containerImageRef, setContainerImageRef] = useState('');
+  const [containerName, setContainerName] = useState('');
+  const [containerPorts, setContainerPorts] = useState('');
+  const [containerCommand, setContainerCommand] = useState('');
+  const [deployNotice, setDeployNotice] = useState('');
+  const [deployError, setDeployError] = useState('');
+  const [deploySuccess, setDeploySuccess] = useState(null);
+  const [isDeploying, setIsDeploying] = useState(false);
 
   const canBuild = useMemo(() => {
     return hostId.trim() && (dockerfile.trim() || contextZip);
@@ -67,6 +83,50 @@ export default function Dashboard({ theme, toggleTheme }) {
   const appendLog = (event) => {
     setLogs((prev) => [...prev, event]);
   };
+
+  const loadAvailableImages = async () => {
+    const resolvedHostId = hostId.trim();
+    if (!resolvedHostId) {
+      setAvailableImages([]);
+      return;
+    }
+
+    setGalleryError('');
+    setIsLoadingImages(true);
+
+    try {
+      const images = await imageService.listAvailableImages(resolvedHostId);
+      setAvailableImages(images);
+    } catch (err) {
+      setAvailableImages([]);
+      setGalleryError(err.message || 'Unable to fetch available images.');
+    } finally {
+      setIsLoadingImages(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAvailableImages();
+  }, [hostId]);
+
+  const galleryImages = useMemo(() => {
+    const merged = new Map();
+
+    for (const image of availableImages) {
+      merged.set(image.image_ref, image);
+    }
+
+    for (const imageRef of builtImages) {
+      if (merged.has(imageRef)) continue;
+      merged.set(imageRef, {
+        image_ref: imageRef,
+        source: 'build pipeline',
+        status: 'ready',
+      });
+    }
+
+    return Array.from(merged.values());
+  }, [availableImages, builtImages]);
 
   const prettyLine = (entry) => {
     if (entry?.stream) return entry.stream.trimEnd();
@@ -89,7 +149,15 @@ export default function Dashboard({ theme, toggleTheme }) {
         contextZip,
         pull,
         nocache,
-        onEvent: appendLog,
+        onEvent: (event) => {
+          appendLog(event);
+          if (event?.status === 'done' && tag.trim()) {
+            setBuiltImages((prev) => {
+              if (prev.includes(tag.trim())) return prev;
+              return [...prev, tag.trim()];
+            });
+          }
+        },
       });
     } catch (err) {
       setError(err.message || 'Unable to start image build.');
@@ -100,8 +168,46 @@ export default function Dashboard({ theme, toggleTheme }) {
 
   const navItems = [
     { id: 'build', label: 'Build Pipeline', icon: Wrench },
+    { id: 'images', label: 'Image Gallery', icon: ImageIcon },
+    { id: 'deploy', label: 'Create Container', icon: Boxes },
     { id: 'profile', label: 'Profile', icon: User },
   ];
+
+  const handleDeployFromGallery = (imageRef) => {
+    setContainerImageRef(imageRef);
+    setActiveTab('deploy');
+    setDeployNotice(`Selected image: ${imageRef}`);
+    setDeployError('');
+    setDeploySuccess(null);
+  };
+
+  const canDeploy = hostId.trim() && containerImageRef.trim();
+
+  const handleDeployContainer = async (e) => {
+    e.preventDefault();
+    if (!canDeploy) return;
+
+    setDeployError('');
+    setDeploySuccess(null);
+    setIsDeploying(true);
+
+    try {
+      const deployed = await containerService.deployContainer({
+        hostId: hostId.trim(),
+        imageRef: containerImageRef.trim(),
+        name: containerName.trim(),
+        ports: containerPorts.trim(),
+        command: containerCommand.trim(),
+      });
+
+      setDeploySuccess(deployed);
+      setDeployNotice(`Container '${deployed.name}' deployed successfully.`);
+    } catch (err) {
+      setDeployError(err.message || 'Unable to deploy container.');
+    } finally {
+      setIsDeploying(false);
+    }
+  };
 
   const initials = (user?.username || 'U').slice(0, 2).toUpperCase();
 
@@ -345,6 +451,126 @@ export default function Dashboard({ theme, toggleTheme }) {
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Theme</p>
                   <p className="mt-1 font-semibold">{theme === 'dark' ? 'Dark' : 'Light'}</p>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === 'images' && (
+            <ImageGallery
+              images={galleryImages}
+              isLoading={isLoadingImages}
+              error={galleryError}
+              onRefresh={loadAvailableImages}
+              onDeploy={handleDeployFromGallery}
+            />
+          )}
+
+          {activeTab === 'deploy' && (
+            <Card className="border-border/70 bg-card/95">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Boxes className="size-5" />
+                  Container Creation
+                </CardTitle>
+                <CardDescription>
+                  Deploy an image by pre-filling from the gallery, then complete container configuration.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {deployNotice ? (
+                  <Alert>
+                    <AlertTitle>Deploy target selected</AlertTitle>
+                    <AlertDescription>{deployNotice}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {deployError ? (
+                  <Alert variant="destructive">
+                    <AlertTitle>Deploy failed</AlertTitle>
+                    <AlertDescription>{deployError}</AlertDescription>
+                  </Alert>
+                ) : null}
+
+                {deploySuccess ? (
+                  <Alert>
+                    <AlertTitle>Container deployed</AlertTitle>
+                    <AlertDescription>
+                      Name: {deploySuccess.name} | Status: {deploySuccess.status} | ID: {deploySuccess.id.slice(0, 12)}
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
+
+                <form className="space-y-4" onSubmit={handleDeployContainer}>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="deploy-host-id">Host ID</Label>
+                      <Input
+                        id="deploy-host-id"
+                        type="number"
+                        min="1"
+                        value={hostId}
+                        onChange={(e) => setHostId(e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="deploy-container-name">Container Name</Label>
+                      <Input
+                        id="deploy-container-name"
+                        type="text"
+                        value={containerName}
+                        onChange={(e) => setContainerName(e.target.value)}
+                        placeholder="myapp-web"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="deploy-image-ref">Image Reference</Label>
+                    <Input
+                      id="deploy-image-ref"
+                      type="text"
+                      value={containerImageRef}
+                      onChange={(e) => setContainerImageRef(e.target.value)}
+                      placeholder="nginx:latest"
+                      required
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="deploy-ports">Port Mappings</Label>
+                      <Input
+                        id="deploy-ports"
+                        type="text"
+                        value={containerPorts}
+                        onChange={(e) => setContainerPorts(e.target.value)}
+                        placeholder="8080:80, 8443:443"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="deploy-command">Start Command</Label>
+                      <Input
+                        id="deploy-command"
+                        type="text"
+                        value={containerCommand}
+                        onChange={(e) => setContainerCommand(e.target.value)}
+                        placeholder="npm run start"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="submit" disabled={!canDeploy || isDeploying}>
+                      {isDeploying ? 'Deploying...' : 'Deploy Container'}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Endpoint: /api/containers/create/
+                    </p>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           )}

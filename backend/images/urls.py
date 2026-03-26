@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    HostImageListView,
     ImagePullJobDetailCancelView,
     ImagePullJobListCreateView,
     ImagePushJobDetailCancelView,
@@ -10,6 +11,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("list/", HostImageListView.as_view(), name="image-list"),
     # Pull endpoints
     path("pull/", ImagePullJobListCreateView.as_view(), name="image-pull-list-create"),
     path(

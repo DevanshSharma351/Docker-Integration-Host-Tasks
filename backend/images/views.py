@@ -20,6 +20,7 @@ from .permissions import IsAdminOrHostOwner
 from .serializers import (
     ImageBuildRequestSerializer,
     ImageInspectSerializer,
+    HostImageListItemSerializer,
     ImagePullJobCreateSerializer,
     ImagePullJobSerializer,
     ImagePushJobCreateSerializer,
@@ -398,6 +399,71 @@ class ImageInspectView(APIView):
         }
 
         serializer = ImageInspectSerializer(inspect_data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class HostImageListView(APIView):
+    """
+    GET /api/hosts/{host_id}/images/list/
+
+    Returns local Docker images available on the target host.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, host_id):
+        host = get_object_or_404(Host, pk=host_id)
+
+        if request.user.role != "admin" and host.owner != request.user:
+            return Response(
+                {"detail": "You do not have permission to list images on this host."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            client = _get_docker_client_for_host(host=host, timeout=30)
+        except docker.errors.DockerException as exc:
+            logger.error(
+                "Cannot connect to Docker daemon on host %s: %s",
+                host.name,
+                exc,
+            )
+            return Response(
+                {"detail": f"Cannot connect to Docker daemon: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        try:
+            docker_images = client.images.list()
+        except docker.errors.APIError as exc:
+            logger.error(
+                "Docker API error listing images on host %s: %s",
+                host.name,
+                exc,
+            )
+            return Response(
+                {"detail": f"Docker API error: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        items = []
+        for image in docker_images:
+            attrs = image.attrs or {}
+            tags = image.tags or []
+
+            # Keep dangling images searchable in UI as well.
+            refs = tags if tags else ["<none>:<none>"]
+            for ref in refs:
+                items.append(
+                    {
+                        "image_id": attrs.get("Id") or image.id,
+                        "image_ref": ref,
+                        "created": attrs.get("Created", ""),
+                        "size": attrs.get("Size", 0),
+                    }
+                )
+
+        serializer = HostImageListItemSerializer(items, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 

@@ -154,6 +154,15 @@ class ImageInspectSerializer(serializers.Serializer):
     layers = ImageLayerSerializer(many=True, help_text="Layer history")
 
 
+class HostImageListItemSerializer(serializers.Serializer):
+    """Compact image list response for gallery/search use cases."""
+
+    image_id = serializers.CharField()
+    image_ref = serializers.CharField()
+    created = serializers.CharField(allow_blank=True, default="")
+    size = serializers.IntegerField(default=0)
+
+
 # --------------------------------------------------------------------------- #
 # Image Push/Tag serializers
 # --------------------------------------------------------------------------- #
