@@ -17,9 +17,27 @@ class Host(models.Model):
     name       = models.CharField(max_length=255)
     ip_address = models.GenericIPAddressField(default='127.0.0.1')
     port       = models.IntegerField(default=2375)
+    connection_string = models.CharField(
+        max_length=255,
+        default='unix:///var/run/docker.sock',
+        # help_text='Docker daemon address, e.g. unix:///var/run/docker.sock or tcp://127.0.0.1:2375',
+    )
 
     class Meta:
         app_label = 'containers'
+
+    def get_connection_string(self):
+        """
+        Return explicit connection_string when present; otherwise derive one
+        from legacy ip_address/port fields for backward compatibility.
+        """
+        if self.connection_string:
+            return self.connection_string
+
+        if self.ip_address in ('localhost', '127.0.0.1'):
+            return 'unix:///var/run/docker.sock'
+
+        return f'tcp://{self.ip_address}:{self.port}'
 
     def __str__(self):
         return f"{self.name} ({self.ip_address}:{self.port})"

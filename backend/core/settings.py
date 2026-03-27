@@ -135,3 +135,10 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
     }
 }
+
+
+import sys
+if 'pytest' in sys.modules:
+    DATABASES['default']['TEST'] = {
+        'NAME': BASE_DIR / 'test_db.sqlite3',
+    }

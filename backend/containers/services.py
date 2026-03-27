@@ -16,10 +16,6 @@ from containers.docker_client import get_docker_client
 
 
 def _log_event(container, user, action, success, error=None):
-    """
-    Always call this after every SDK action — success or failure.
-    Never let a view write to ContainerLifecycleEvent directly.
-    """
     ContainerLifecycleEvent.objects.create(
         container=container,
         triggered_by=user,
@@ -31,22 +27,12 @@ def _log_event(container, user, action, success, error=None):
 
 
 def _get_sdk_container(record):
-    """
-    Gets the live Docker SDK container object from a ContainerRecord.
-    Raises ServiceUnavailable if host unreachable.
-    Raises ContainerRecord.DoesNotExist equivalent via docker.errors if
-    container is missing on the daemon.
-    """
     client = get_docker_client(record.host)
     return client.containers.get(record.container_id)
 
 def create_container(host, user, image_ref, name, environment,
                      port_bindings, volumes):
-    """
-    Creates and starts a container on the given host.
-    Returns (ContainerRecord, error_string).
-    error_string is None on success.
-    """
+
     client = get_docker_client(host)
     try:
         sdk_container = client.containers.run(
@@ -115,15 +101,6 @@ _ACTION_MAP = {
 
 
 def lifecycle_action(record, user, sdk_method):
-    """
-    Generic handler for start/stop/restart/kill/pause/unpause.
-    All six lifecycle views call this one function.
-
-    Returns error string or None on success.
-
-    Usage:
-        error = lifecycle_action(record, request.user, 'stop')
-    """
     action = _ACTION_MAP[sdk_method]
     try:
         sdk_container = _get_sdk_container(record)
@@ -139,11 +116,6 @@ def lifecycle_action(record, user, sdk_method):
         return str(e.explanation)
 
 def get_container_stats(record):
-    """
-    Returns a live stats snapshot dict from the Docker daemon.
-    Calls container.stats(stream=False) — nothing is stored in the DB.
-    Returns (stats_dict, error_string).
-    """
     try:
         sdk_container = _get_sdk_container(record)
         raw = sdk_container.stats(stream=False)
@@ -200,11 +172,7 @@ def get_container_stats(record):
 
 
 def get_container_logs(record, tail=200, timestamps=False):
-    """
-    Fetches recent logs as a static snapshot.
-    Calls container.logs(stream=False) — nothing stored in DB.
-    Returns (lines_list, error_string).
-    """
+
     try:
         sdk_container = _get_sdk_container(record)
         raw = sdk_container.logs(
@@ -220,19 +188,12 @@ def get_container_logs(record, tail=200, timestamps=False):
 
 
 def issue_exec_ticket(record, user):
-    """
-    Creates and returns a short-lived ExecTicket for WebSocket auth.
-    The ticket is stored in Postgres (single-use, 30s TTL).
-    Returns the ExecTicket instance.
-    """
+
     return ExecTicket.issue(container=record, user=user)
 
 
 def validate_and_consume_ticket(ticket_value):
-    """
-    Called by the WebSocket consumer on connect.
-    Validates the ticket, marks it used, returns the ExecTicket or None.
-    """
+
     try:
         ticket = ExecTicket.objects.select_related(
             'container', 'container__host', 'issued_to'
