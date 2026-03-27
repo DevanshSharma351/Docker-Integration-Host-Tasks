@@ -5,11 +5,12 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    bio = serializers.CharField(source='profile.bio', read_only=True)
+    avatar_url = serializers.CharField(source='profile.avatar_url', read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'first_name', 'last_name']
-        read_only_fields = ['id']
-
+        fields = ['id', 'username', 'email', 'bio', 'avatar_url']
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)

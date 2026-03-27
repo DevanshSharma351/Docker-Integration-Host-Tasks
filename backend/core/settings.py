@@ -49,6 +49,8 @@ DEBUG = get_bool_env("DJANGO_DEBUG")
 
 ALLOWED_HOSTS = get_list_env("DJANGO_ALLOWED_HOSTS")
 
+# Encryption key for django-encrypted-fields
+SALT_KEY = "django-insecure-test-salt-key-change-in-production"
 
 # Application definition
 
@@ -60,6 +62,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'authentication',
+    'hosts',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
