@@ -54,20 +54,29 @@ def mock_docker(monkeypatch):
 
 class TestContainerListCreateView:
 
-    def test_list_returns_200(self, client, db, host, container_record):
+    def test_list_returns_200(self, client, db, host, container_record, mock_docker):
+        sdk_mock = MagicMock()
+        sdk_mock.attrs = {'State': {'Status': 'running'}}
+        mock_docker.containers.get.return_value = sdk_mock
         response = client.get(f'/api/hosts/{host.id}/containers/')
         assert response.status_code == 200
 
     def test_list_returns_correct_count(
-        self, client, db, host, container_record
+        self, client, db, host, container_record, mock_docker
     ):
+        sdk_mock = MagicMock()
+        sdk_mock.attrs = {'State': {'Status': 'running'}}
+        mock_docker.containers.get.return_value = sdk_mock
         response = client.get(f'/api/hosts/{host.id}/containers/')
         assert response.data['count'] == 1
         assert response.data['results'][0]['name'] == 'view-test-nginx'
 
     def test_list_filters_by_status(
-        self, client, db, host, container_record
+        self, client, db, host, container_record, mock_docker
     ):
+        sdk_mock = MagicMock()
+        sdk_mock.attrs = {'State': {'Status': 'running'}}
+        mock_docker.containers.get.return_value = sdk_mock
         response = client.get(
             f'/api/hosts/{host.id}/containers/?status=running'
         )

@@ -30,18 +30,77 @@ def _get_sdk_container(record):
     client = get_docker_client(record.host)
     return client.containers.get(record.container_id)
 
+
+def _default_command_for_image(image_ref, command):
+    if (command or '').strip():
+        return command
+
+    image = (image_ref or '').strip().lower()
+    if image == 'alpine' or image.startswith('alpine:'):
+        return 'sleep infinity'
+    if image == 'node' or image.startswith('node:'):
+        return 'sleep infinity'
+
+    return ''
+
+
+def _map_docker_state_to_record_status(state_status):
+    mapping = {
+        'created': ContainerRecord.Status.CREATED,
+        'running': ContainerRecord.Status.RUNNING,
+        'paused': ContainerRecord.Status.PAUSED,
+        'restarting': ContainerRecord.Status.RUNNING,
+        'exited': ContainerRecord.Status.STOPPED,
+        'dead': ContainerRecord.Status.KILLED,
+    }
+    return mapping.get((state_status or '').lower(), ContainerRecord.Status.STOPPED)
+
+
+def sync_record_with_docker(record):
+    """
+    Refresh a DB record from live Docker state.
+    If the container no longer exists on daemon, mark as REMOVED.
+    """
+    try:
+        sdk_container = _get_sdk_container(record)
+        sdk_container.reload()
+        state_status = (sdk_container.attrs.get('State') or {}).get('Status')
+        resolved_status = _map_docker_state_to_record_status(state_status)
+    except docker.errors.NotFound:
+        resolved_status = ContainerRecord.Status.REMOVED
+    except docker.errors.APIError:
+        return
+
+    if record.status != resolved_status:
+        record.status = resolved_status
+        record.save(update_fields=['status', 'updated_at'])
+
+
+def sync_host_records(host):
+    for record in ContainerRecord.objects.filter(host=host).exclude(
+        status=ContainerRecord.Status.REMOVED
+    ):
+        sync_record_with_docker(record)
+
 def create_container(host, user, image_ref, name, environment,
-                     port_bindings, volumes):
+                     port_bindings, volumes, command=''):
 
     client = get_docker_client(host)
     try:
+        resolved_command = _default_command_for_image(image_ref, command)
+        run_kwargs = {
+            'image': image_ref,
+            'name': name,
+            'environment': environment,
+            'ports': port_bindings,
+            'volumes': volumes,
+            'detach': True,
+        }
+        if resolved_command:
+            run_kwargs['command'] = resolved_command
+
         sdk_container = client.containers.run(
-            image=image_ref,
-            name=name,
-            environment=environment,
-            ports=port_bindings,
-            volumes=volumes,
-            detach=True,
+            **run_kwargs
         )
         record = ContainerRecord.objects.create(
             host=host,
@@ -68,6 +127,12 @@ def remove_container(record, user):
     try:
         sdk_container = _get_sdk_container(record)
         sdk_container.remove(force=True)
+        record.status = ContainerRecord.Status.REMOVED
+        record.save(update_fields=['status', 'updated_at'])
+        _log_event(record, user, ContainerLifecycleEvent.Action.REMOVE, True)
+        return None
+
+    except docker.errors.NotFound:
         record.status = ContainerRecord.Status.REMOVED
         record.save(update_fields=['status', 'updated_at'])
         _log_event(record, user, ContainerLifecycleEvent.Action.REMOVE, True)
@@ -104,9 +169,15 @@ def lifecycle_action(record, user, sdk_method):
     action = _ACTION_MAP[sdk_method]
     try:
         sdk_container = _get_sdk_container(record)
-        getattr(sdk_container, sdk_method)()  # calls e.g. sdk_container.stop()
+        getattr(sdk_container, sdk_method)()
 
         record.status = _STATUS_MAP[sdk_method]
+        record.save(update_fields=['status', 'updated_at'])
+        _log_event(record, user, action, True)
+        return None
+
+    except docker.errors.NotFound:
+        record.status = ContainerRecord.Status.REMOVED
         record.save(update_fields=['status', 'updated_at'])
         _log_event(record, user, action, True)
         return None
@@ -120,41 +191,57 @@ def get_container_stats(record):
         sdk_container = _get_sdk_container(record)
         raw = sdk_container.stats(stream=False)
 
-        # CPU %
-        cpu_delta    = (raw['cpu_stats']['cpu_usage']['total_usage']
-                      - raw['precpu_stats']['cpu_usage']['total_usage'])
-        system_delta = (raw['cpu_stats']['system_cpu_usage']
-                      - raw['precpu_stats']['system_cpu_usage'])
-        num_cpus     = raw['cpu_stats'].get('online_cpus', 1)
+        cpu_stats = raw.get('cpu_stats') or {}
+        precpu_stats = raw.get('precpu_stats') or {}
+        cpu_usage = cpu_stats.get('cpu_usage') or {}
+        precpu_usage = precpu_stats.get('cpu_usage') or {}
+
+        # Docker may omit system_cpu_usage for stopped/exited containers.
+        cpu_delta = (
+            cpu_usage.get('total_usage', 0)
+            - precpu_usage.get('total_usage', 0)
+        )
+        cpu_system = cpu_stats.get('system_cpu_usage')
+        precpu_system = precpu_stats.get('system_cpu_usage')
+        if cpu_system is None or precpu_system is None:
+            system_delta = 0
+        else:
+            system_delta = cpu_system - precpu_system
+
+        num_cpus = cpu_stats.get('online_cpus')
+        if not num_cpus:
+            num_cpus = len(cpu_usage.get('percpu_usage') or []) or 1
+
         cpu_percent  = (
             (cpu_delta / system_delta) * num_cpus * 100.0
             if system_delta > 0 else 0.0
         )
 
         # Memory
-        mem = raw['memory_stats']
+        mem = raw.get('memory_stats') or {}
+        mem_usage = mem.get('usage', 0)
+        mem_limit = mem.get('limit', 0)
+        mem_percent = round((mem_usage / mem_limit) * 100, 2) if mem_limit > 0 else 0.0
 
         # Network — sum across all interfaces
         net    = raw.get('networks', {})
-        rx     = sum(v['rx_bytes'] for v in net.values())
-        tx     = sum(v['tx_bytes'] for v in net.values())
+        rx     = sum((v or {}).get('rx_bytes', 0) for v in net.values())
+        tx     = sum((v or {}).get('tx_bytes', 0) for v in net.values())
 
         # Block I/O
         blk         = (raw.get('blkio_stats', {})
                           .get('io_service_bytes_recursive')) or []
-        read_bytes  = next((b['value'] for b in blk if b['op'] == 'Read'), 0)
-        write_bytes = next((b['value'] for b in blk if b['op'] == 'Write'), 0)
+        read_bytes  = next((b.get('value', 0) for b in blk if (b or {}).get('op') == 'Read'), 0)
+        write_bytes = next((b.get('value', 0) for b in blk if (b or {}).get('op') == 'Write'), 0)
 
         return {
             'container_id': record.container_id,
             'name':         record.name,
             'cpu_percent':  round(cpu_percent, 2),
             'memory': {
-                'usage_bytes': mem.get('usage', 0),
-                'limit_bytes': mem.get('limit', 0),
-                'percent':     round(
-                    mem.get('usage', 0) / mem.get('limit', 1) * 100, 2
-                ),
+                'usage_bytes': mem_usage,
+                'limit_bytes': mem_limit,
+                'percent':     mem_percent,
             },
             'network': {
                 'rx_bytes': rx,

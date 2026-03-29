@@ -117,6 +117,52 @@ class TestCreateContainer:
         assert record is None
         assert error is not None
 
+    def test_node_image_defaults_to_keepalive_when_command_empty(
+        self, db, host, user, mock_docker
+    ):
+        mock_sdk_container = MagicMock()
+        mock_sdk_container.id = 'sha256nodekeepalive'
+        mock_docker.containers.run.return_value = mock_sdk_container
+
+        record, error = services.create_container(
+            host=host,
+            user=user,
+            image_ref='node:25',
+            name='node-keepalive',
+            environment={},
+            port_bindings={},
+            volumes=[],
+            command='',
+        )
+
+        assert error is None
+        assert record is not None
+        mock_docker.containers.run.assert_called_once()
+        assert mock_docker.containers.run.call_args.kwargs['command'] == 'sleep infinity'
+
+    def test_explicit_command_overrides_default(
+        self, db, host, user, mock_docker
+    ):
+        mock_sdk_container = MagicMock()
+        mock_sdk_container.id = 'sha256nodecustomcmd'
+        mock_docker.containers.run.return_value = mock_sdk_container
+
+        record, error = services.create_container(
+            host=host,
+            user=user,
+            image_ref='node:25',
+            name='node-custom-cmd',
+            environment={},
+            port_bindings={},
+            volumes=[],
+            command='node -e "setInterval(() => {}, 60000)"',
+        )
+
+        assert error is None
+        assert record is not None
+        mock_docker.containers.run.assert_called_once()
+        assert mock_docker.containers.run.call_args.kwargs['command'] == 'node -e "setInterval(() => {}, 60000)"'
+
 class TestLifecycleAction:
 
     @pytest.mark.parametrize('sdk_method,expected_status', [
@@ -137,6 +183,17 @@ class TestLifecycleAction:
         assert error is None
         running_container.refresh_from_db()
         assert running_container.status == expected_status
+
+class TestSyncRecords:
+
+    def test_sync_marks_removed_when_container_missing(self, db, running_container, mock_docker):
+        import docker.errors
+        mock_docker.containers.get.side_effect = docker.errors.NotFound('missing')
+
+        services.sync_record_with_docker(running_container)
+
+        running_container.refresh_from_db()
+        assert running_container.status == 'REMOVED'
 
     @pytest.mark.parametrize('sdk_method', [
         'start', 'stop', 'restart', 'kill', 'pause', 'unpause'
@@ -268,6 +325,27 @@ class TestGetContainerStats:
 
         assert stats is None
         assert error is not None
+
+    def test_missing_system_cpu_usage_does_not_crash(
+        self, db, running_container, mock_docker
+    ):
+        mock_docker.containers.get.return_value.stats.return_value = {
+            'cpu_stats': {
+                'cpu_usage': {'total_usage': 0},
+            },
+            'precpu_stats': {
+                'cpu_usage': {'total_usage': 0},
+            },
+            'memory_stats': {},
+            'blkio_stats': {'io_service_bytes_recursive': None},
+        }
+
+        stats, error = services.get_container_stats(running_container)
+
+        assert error is None
+        assert stats is not None
+        assert stats['cpu_percent'] == 0.0
+        assert stats['memory']['percent'] == 0.0
 
 class TestGetContainerLogs:
 

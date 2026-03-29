@@ -19,6 +19,7 @@ class ContainerListCreateView(APIView):
     def get(self, request, host_id):
         """List all containers on a host — any authenticated user."""
         host = get_object_or_404(Host, pk=host_id)
+        services.sync_host_records(host)
         status_filter = request.query_params.get('status', None)
 
         qs = ContainerRecord.objects.filter(host=host)
@@ -50,6 +51,7 @@ class ContainerListCreateView(APIView):
             environment=serializer.validated_data['environment'],
             port_bindings=serializer.validated_data['port_bindings'],
             volumes=serializer.validated_data['volumes'],
+            command=serializer.validated_data.get('command', ''),
         )
 
         if error:
@@ -72,6 +74,8 @@ class ContainerDetailView(APIView):
         record = get_object_or_404(
             ContainerRecord, pk=container_id, host=host
         )
+        services.sync_record_with_docker(record)
+        record.refresh_from_db()
         return Response(ContainerRecordSerializer(record).data)
 
     @require_auth

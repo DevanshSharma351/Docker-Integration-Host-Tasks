@@ -37,6 +37,11 @@ class ContainerRecordListSerializer(serializers.ModelSerializer):
 class ContainerCreateSerializer(serializers.Serializer):
     image_ref     = serializers.CharField(max_length=500)
     name          = serializers.CharField(max_length=255)
+    command       = serializers.CharField(
+                        required=False,
+                        allow_blank=True,
+                        default=''
+                    )
     environment   = serializers.DictField(
                         child=serializers.CharField(),
                         required=False,
