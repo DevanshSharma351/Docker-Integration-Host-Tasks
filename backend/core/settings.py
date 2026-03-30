@@ -51,6 +51,9 @@ ALLOWED_HOSTS = get_list_env("DJANGO_ALLOWED_HOSTS")
 
 # Encryption key for django-encrypted-fields
 SALT_KEY = "django-insecure-test-salt-key-change-in-production"
+# Fernet key for encrypting registry tokens
+FIELD_ENCRYPTION_KEY = get_env("FIELD_ENCRYPTION_KEY")
+
 
 # Application definition
 
@@ -62,7 +65,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'authentication',
+    'users',
     'hosts',
+    'networks',
+    'containers',
+    'registries',
+    'images',
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
@@ -175,4 +183,32 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'standard': {
+            'format': '%(asctime)s %(levelname)s [%(name)s] %(message)s',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }

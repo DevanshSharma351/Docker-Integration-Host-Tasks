@@ -1,5 +1,31 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { CircleAlert, CircleCheck } from 'lucide-react';
+
+
+function parseRegisterError(err) {
+  if (!err) return 'Registration failed';
+  if (typeof err === 'string') return err;
+  if (err.detail) return err.detail;
+
+  const firstEntry = Object.entries(err)[0];
+  if (firstEntry && Array.isArray(firstEntry[1]) && firstEntry[1].length) {
+    return `${firstEntry[0]}: ${firstEntry[1][0]}`;
+  }
+
+  return 'Registration failed';
+}
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -27,7 +53,7 @@ export default function Register() {
       await register(formData);
       setSuccess(true);
     } catch (err) {
-      setError(JSON.stringify(err));
+      setError(parseRegisterError(err));
     } finally {
       setLoading(false);
     }
@@ -35,91 +61,113 @@ export default function Register() {
 
   if (success) {
     return (
-      <div className="max-w-md mx-auto mt-8 p-6 bg-green-100 rounded">
-        <h2 className="text-xl font-bold text-green-700">Registration Successful!</h2>
-        <p className="mt-2">You can now login with your credentials.</p>
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-500/40 dark:bg-emerald-500/10">
+        <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300">
+          <CircleCheck className="size-6" />
+          <div>
+            <h2 className="text-lg font-semibold">Registration Successful</h2>
+            <p className="text-sm mt-1">You can now login with your new credentials.</p>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">Register</h2>
-      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
+    <div>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <CircleAlert className="size-4" />
+          <AlertTitle>Registration Failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block mb-2">Username *</label>
-          <input
-            type="text"
-            name="username"
-            value={formData.username}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-            required
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">Email</label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">Password * (min 8 chars)</label>
-          <input
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-            required
-            minLength={8}
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">Role</label>
-          <select
-            name="role"
-            value={formData.role}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-          >
-            <option value="viewer">Viewer</option>
-            <option value="host">Host</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">First Name</label>
-          <input
-            type="text"
-            name="first_name"
-            value={formData.first_name}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">Last Name</label>
-          <input
-            type="text"
-            name="last_name"
-            value={formData.last_name}
-            onChange={handleChange}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400"
-        >
-          {loading ? 'Registering...' : 'Register'}
-        </button>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="username">Username</FieldLabel>
+            <Input
+              id="username"
+              type="text"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              required
+            />
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+            />
+            <FieldDescription>We will only use this for account communication.</FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="password">Password (min 8 chars)</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              minLength={8}
+            />
+          </Field>
+
+          <Field>
+            <FieldLabel>Role</FieldLabel>
+            <Select
+              value={formData.role}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, role: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="viewer">Viewer</SelectItem>
+                <SelectItem value="host">Host</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="first_name">First Name</FieldLabel>
+              <Input
+                id="first_name"
+                type="text"
+                name="first_name"
+                value={formData.first_name}
+                onChange={handleChange}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="last_name">Last Name</FieldLabel>
+              <Input
+                id="last_name"
+                type="text"
+                name="last_name"
+                value={formData.last_name}
+                onChange={handleChange}
+              />
+            </Field>
+          </div>
+
+          <Field>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Creating Account...' : 'Register'}
+            </Button>
+          </Field>
+        </FieldGroup>
       </form>
     </div>
   );

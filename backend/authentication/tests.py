@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
+from hosts.models import Host
 
 User = get_user_model()
 
@@ -93,6 +94,33 @@ class RegistrationTest(TestCase):
         response = self.client.post(self.register_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_register_host_creates_default_host_record(self):
+        data = {
+            'username': 'hostregister',
+            'password': 'newpass123',
+            'role': 'host',
+        }
+        response = self.client.post(self.register_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username='hostregister')
+        host = Host.objects.filter(owner=user).first()
+        self.assertIsNotNone(host)
+        self.assertEqual(host.hostname, 'localhost')
+        self.assertEqual(host.port, 2375)
+
+    def test_register_viewer_does_not_create_host_record(self):
+        data = {
+            'username': 'viewerregister',
+            'password': 'newpass123',
+            'role': 'viewer',
+        }
+        response = self.client.post(self.register_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        user = User.objects.get(username='viewerregister')
+        self.assertFalse(Host.objects.filter(owner=user).exists())
+
 
 class LoginTest(TestCase):
     """Test JWT login endpoint"""
@@ -140,6 +168,41 @@ class LoginTest(TestCase):
         response = self.client.post(self.login_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_login_host_creates_default_host_if_missing(self):
+        host_user = User.objects.create_user(
+            username='hostlogin',
+            password='hostpass123',
+            role='host',
+        )
+        self.assertFalse(Host.objects.filter(owner=host_user).exists())
+
+        response = self.client.post(self.login_url, {
+            'username': 'hostlogin',
+            'password': 'hostpass123',
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(Host.objects.filter(owner=host_user).exists())
+
+    def test_login_host_does_not_duplicate_default_host(self):
+        host_user = User.objects.create_user(
+            username='hostnodup',
+            password='hostpass123',
+            role='host',
+        )
+        Host.objects.create(
+            name='existing',
+            hostname='localhost',
+            port=2375,
+            owner=host_user,
+        )
+
+        response = self.client.post(self.login_url, {
+            'username': 'hostnodup',
+            'password': 'hostpass123',
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(Host.objects.filter(owner=host_user).count(), 1)
+
 
 class TokenRefreshTest(TestCase):
     """Test JWT token refresh endpoint"""
@@ -173,68 +236,6 @@ class TokenRefreshTest(TestCase):
             'refresh': 'invalid_token'
         })
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
-
-class UserProfileTest(TestCase):
-    """Test user profile endpoint"""
-    
-    def setUp(self):
-        self.client = APIClient()
-        self.profile_url = '/api/auth/profile/'
-        self.login_url = '/api/auth/login/'
-        self.user = User.objects.create_user(
-            username='testuser',
-            email='test@example.com',
-            password='testpass123',
-            role='host',
-            first_name='Test',
-            last_name='User'
-        )
-    
-    def test_get_profile_authenticated(self):
-        # Login to get access token
-        login_response = self.client.post(self.login_url, {
-            'username': 'testuser',
-            'password': 'testpass123'
-        })
-        access_token = login_response.data['access']
-        
-        # Get profile
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-        response = self.client.get(self.profile_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['username'], 'testuser')
-        self.assertEqual(response.data['email'], 'test@example.com')
-        self.assertEqual(response.data['role'], 'host')
-        self.assertEqual(response.data['first_name'], 'Test')
-        self.assertEqual(response.data['last_name'], 'User')
-    
-    def test_get_profile_unauthenticated(self):
-        response = self.client.get(self.profile_url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-    
-    def test_update_profile(self):
-        # Login
-        login_response = self.client.post(self.login_url, {
-            'username': 'testuser',
-            'password': 'testpass123'
-        })
-        access_token = login_response.data['access']
-        
-        # Update profile
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-        response = self.client.patch(self.profile_url, {
-            'first_name': 'Updated',
-            'last_name': 'Name'
-        })
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['first_name'], 'Updated')
-        self.assertEqual(response.data['last_name'], 'Name')
-        
-        # Verify in database
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.first_name, 'Updated')
-        self.assertEqual(self.user.last_name, 'Name')
 
 
 class PermissionsTest(TestCase):

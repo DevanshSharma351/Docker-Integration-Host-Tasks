@@ -1,5 +1,21 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import { CircleAlert } from 'lucide-react';
+
+
+function parseLoginError(err) {
+  if (!err) return 'Login failed';
+  if (typeof err === 'string') return err;
+  if (err.detail) return err.detail;
+  if (Array.isArray(err.non_field_errors) && err.non_field_errors.length) {
+    return err.non_field_errors[0];
+  }
+  return 'Login failed';
+}
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -15,45 +31,57 @@ export default function Login() {
     try {
       await login(username, password);
     } catch (err) {
-      setError(err.detail || 'Login failed');
+      setError(parseLoginError(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded shadow">
-      <h2 className="text-2xl font-bold mb-4">Login</h2>
-      {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
+    <div>
+      {error && (
+        <Alert variant="destructive" className="mb-4">
+          <CircleAlert className="size-4" />
+          <AlertTitle>Login Failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block mb-2">Username</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-2 border rounded"
-            required
-          />
-        </div>
-        <div className="mb-4">
-          <label className="block mb-2">Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 border rounded"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
-        >
-          {loading ? 'Logging in...' : 'Login'}
-        </button>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="username">Username</FieldLabel>
+            <Input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </Field>
+
+          <Field>
+            <Button type="submit" disabled={loading} className="w-full">
+              {loading ? 'Signing In...' : 'Login'}
+            </Button>
+          </Field>
+        </FieldGroup>
       </form>
+
+      <FieldDescription className="mt-4 text-center">
+        Demo user: <strong>dhee</strong> / <strong>Dhee@12345</strong>
+      </FieldDescription>
     </div>
   );
 }
