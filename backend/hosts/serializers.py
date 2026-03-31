@@ -16,11 +16,29 @@ class ProfileSerializer(serializers.ModelSerializer):
 #Host Serializer (GET responses)
 class HostSerializer(serializers.ModelSerializer):
     created_by = serializers.StringRelatedField(read_only=True)
+    role = serializers.SerializerMethodField()
 
     class Meta:
         model = Host
-        fields = ['id', 'alias', 'ip_address', 'port', 'created_by', 'created_at']
-        read_only_fields = ['id', 'created_by', 'created_at']
+        fields = ['id', 'alias', 'ip_address', 'port', 'created_by', 'created_at', 'role']
+        read_only_fields = ['id', 'created_by', 'created_at', 'role']
+
+    def get_role(self, obj):
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user') or not request.user.is_authenticated:
+            return None
+        if request.user.is_superuser:
+            return 'ADMIN'
+        
+        # Look up role in junction table
+        role_entry = UserHostRole.objects.filter(user=request.user, host=obj).first()
+        if role_entry:
+            return role_entry.role
+        
+        # Fallback to checking the user's global role if they somehow bypass the junction
+        if request.user.role.upper() == 'ADMIN':
+            return 'ADMIN'
+        return 'VIEWER'
 
 
 #Host Create Serializer (POST /api/hosts/)
