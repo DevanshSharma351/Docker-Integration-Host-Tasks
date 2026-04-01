@@ -8,6 +8,7 @@ from containers import services
 from containers.auth import require_auth, require_role
 from containers.models import ContainerLifecycleEvent, ContainerRecord, Host
 from containers.serializers import (
+    HostSerializer,
     ContainerCreateSerializer,
     ContainerLifecycleEventSerializer,
     ContainerLogsSerializer,
@@ -266,3 +267,19 @@ class ContainerEventListView(APIView):
                 "results": serializer.data,
             }
         )
+
+
+class ContainerHostBootstrapView(APIView):
+    @require_auth
+    @require_role(["ADMIN", "HOST_OWNER"])
+    def post(self, request):
+        host, _ = Host.objects.get_or_create(
+            name="local-docker",
+            defaults={
+                "ip_address": "127.0.0.1",
+                "port": 2375,
+                "connection_string": "unix:///var/run/docker.sock",
+            },
+        )
+
+        return Response(HostSerializer(host).data, status=status.HTTP_200_OK)

@@ -1,5 +1,6 @@
 from django.urls import path
 from containers.views import (
+    ContainerHostBootstrapView,
     ContainerListCreateView,
     ContainerDetailView,
     ContainerStartView,
@@ -17,6 +18,10 @@ from containers.views import (
 
 
 urlpatterns = [
+    path(
+        'containers/hosts/bootstrap/',
+        ContainerHostBootstrapView.as_view()
+    ),
     path(
         'hosts/<int:host_id>/containers/',
         ContainerListCreateView.as_view()

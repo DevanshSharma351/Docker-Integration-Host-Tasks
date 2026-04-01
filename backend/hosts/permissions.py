@@ -15,9 +15,11 @@ class IsAdminRole(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
 
+        global_role = getattr(request.user, 'role', '')
         return (
             request.user.is_superuser or 
             request.user.is_staff or 
+            str(global_role).lower() == 'admin' or
             UserHostRole.objects.filter(user=request.user, role='ADMIN').exists()
         )
 

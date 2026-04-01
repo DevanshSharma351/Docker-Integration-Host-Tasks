@@ -17,7 +17,7 @@ const Logo = () => (
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
-    username: '', email: '', password: '', password_confirm: '',
+    username: '', email: '', password: '', password_confirm: '', role: 'admin',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,10 +37,26 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(form);
+      const payload = {
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        role: form.role,
+      };
+      await register(payload);
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+      const data = err.response?.data;
+      if (typeof data === 'string') {
+        setError(data);
+      } else if (data?.detail) {
+        setError(data.detail);
+      } else if (data && typeof data === 'object') {
+        const first = Object.values(data).flat()[0];
+        setError(first || 'Registration failed. Please try again.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -102,6 +118,19 @@ export default function RegisterPage() {
               onChange={handleChange}
               required
             />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Role</label>
+            <select
+              className="form-input"
+              name="role"
+              value={form.role}
+              onChange={handleChange}
+            >
+              <option value="admin">Admin</option>
+              <option value="host">Host owner</option>
+              <option value="viewer">Viewer</option>
+            </select>
           </div>
           <button className="btn-primary" type="submit" disabled={loading}>
             {loading ? 'Creating account…' : 'Create account'}
