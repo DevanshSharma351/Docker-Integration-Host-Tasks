@@ -1,22 +1,22 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-const backendHttp = process.env.VITE_BACKEND_HTTP || 'http://127.0.0.1:8001';
-const backendWs = process.env.VITE_BACKEND_WS || 'ws://127.0.0.1:8001';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   server: {
     port: 5173,
     proxy: {
       '/api': {
-        target: backendHttp,
+        target: 'http://localhost:8000',
         changeOrigin: true,
-      },
-      '/ws': {
-        target: backendWs,
-        ws: true,
       },
     },
   },
-});
+})

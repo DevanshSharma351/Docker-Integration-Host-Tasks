@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 from unittest.mock import MagicMock
 from django.contrib.auth import get_user_model
 
@@ -9,15 +10,19 @@ from containers.models import Host, ContainerRecord, ContainerLifecycleEvent, Ex
 User = get_user_model()
 
 @pytest.fixture
-def client():
-    return APIClient()
+def client(user):
+    token = str(AccessToken.for_user(user))
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    return client
 
 
 @pytest.fixture
 def user(db):
     return User.objects.create_user(
         username='viewuser',
-        password='pass123'
+        password='pass123',
+        role='admin',
     )
 
 

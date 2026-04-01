@@ -1,5 +1,3 @@
-# WebSocket URL patterns
-# Consumers will be wired in here as we build them
 from django.urls import re_path
 from containers.consumers.exec_consumer import ExecConsumer
 from containers.consumers.log_consumer import LogConsumer

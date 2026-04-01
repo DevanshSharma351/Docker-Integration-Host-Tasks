@@ -32,7 +32,7 @@ def get_docker_client(host):
     try:
         client = docker.DockerClient(base_url=_resolve_base_url(host))
 
-        client.ping()  # fail fast if host is unreachable
+        client.ping() 
         return client
 
     except DockerException as e:
