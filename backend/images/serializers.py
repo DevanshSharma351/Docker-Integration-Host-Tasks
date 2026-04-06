@@ -7,7 +7,7 @@ class ImagePullJobSerializer(serializers.ModelSerializer):
     """Read serializer for listing / retrieving pull jobs."""
 
     requested_by = serializers.ReadOnlyField(source="requested_by.username")
-    host_name = serializers.ReadOnlyField(source="host.name")
+    host_name = serializers.ReadOnlyField(source="host.alias")
     registry_alias = serializers.ReadOnlyField(
         source="registry_credential.alias", default=None
     )
@@ -172,7 +172,7 @@ class ImagePushJobSerializer(serializers.ModelSerializer):
     """Read serializer for listing / retrieving push jobs."""
 
     requested_by = serializers.ReadOnlyField(source="requested_by.username")
-    host_name = serializers.ReadOnlyField(source="host.name")
+    host_name = serializers.ReadOnlyField(source="host.alias")
     registry_alias = serializers.ReadOnlyField(
         source="registry_credential.alias", default=None
     )
@@ -242,7 +242,7 @@ class ImageDeleteJobSerializer(serializers.ModelSerializer):
     """Read serializer for listing / retrieving delete jobs."""
 
     requested_by = serializers.ReadOnlyField(source="requested_by.username")
-    host_name = serializers.ReadOnlyField(source="host.name")
+    host_name = serializers.ReadOnlyField(source="host.alias")
 
     class Meta:
         model = ImageDeleteJob

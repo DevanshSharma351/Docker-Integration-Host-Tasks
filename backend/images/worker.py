@@ -47,17 +47,17 @@ def _do_pull(job_id: str) -> None:
     try:
         # Connect to the Docker daemon on the target host
         host = job.host
-        if _is_local_hostname(host.hostname):
+        if _is_local_hostname(host.ip_address):
             try:
                 client = docker.from_env(timeout=300)
             except docker.errors.DockerException:
                 client = docker.DockerClient(
-                    base_url=f"tcp://{host.hostname}:{host.port}",
+                    base_url=f"tcp://{host.ip_address}:{host.port}",
                     timeout=300,
                 )
         else:
             client = docker.DockerClient(
-                base_url=f"tcp://{host.hostname}:{host.port}",
+                base_url=f"tcp://{host.ip_address}:{host.port}",
                 timeout=300,
             )
 
@@ -104,7 +104,7 @@ def _do_pull(job_id: str) -> None:
             "Pull job %s completed successfully image=%s host=%s",
             job.id,
             job.image_ref,
-            host.name,
+            host.alias,
         )
 
     except docker.errors.APIError as exc:
@@ -168,17 +168,17 @@ def _do_push(job_id: str) -> None:
     try:
         # Connect to the Docker daemon on the target host
         host = job.host
-        if _is_local_hostname(host.hostname):
+        if _is_local_hostname(host.ip_address):
             try:
                 client = docker.from_env(timeout=300)
             except docker.errors.DockerException:
                 client = docker.DockerClient(
-                    base_url=f"tcp://{host.hostname}:{host.port}",
+                    base_url=f"tcp://{host.ip_address}:{host.port}",
                     timeout=300,
                 )
         else:
             client = docker.DockerClient(
-                base_url=f"tcp://{host.hostname}:{host.port}",
+                base_url=f"tcp://{host.ip_address}:{host.port}",
                 timeout=300,
             )
 
@@ -198,7 +198,7 @@ def _do_push(job_id: str) -> None:
                 "Tagged image %s as %s on host %s",
                 job.source_image_ref,
                 job.target_image_ref,
-                host.name,
+                host.alias,
             )
         except docker.errors.ImageNotFound:
             job.status = ImagePushJob.Status.FAILED
@@ -249,7 +249,7 @@ def _do_push(job_id: str) -> None:
             job.id,
             job.source_image_ref,
             job.target_image_ref,
-            host.name,
+            host.alias,
         )
 
     except docker.errors.APIError as exc:
@@ -311,17 +311,17 @@ def _do_delete(job_id: str) -> None:
     try:
         # Connect to the Docker daemon on the target host
         host = job.host
-        if _is_local_hostname(host.hostname):
+        if _is_local_hostname(host.ip_address):
             try:
                 client = docker.from_env(timeout=300)
             except docker.errors.DockerException:
                 client = docker.DockerClient(
-                    base_url=f"tcp://{host.hostname}:{host.port}",
+                    base_url=f"tcp://{host.ip_address}:{host.port}",
                     timeout=300,
                 )
         else:
             client = docker.DockerClient(
-                base_url=f"tcp://{host.hostname}:{host.port}",
+                base_url=f"tcp://{host.ip_address}:{host.port}",
                 timeout=300,
             )
 
@@ -346,7 +346,7 @@ def _do_delete(job_id: str) -> None:
                 logger.info(
                     "Pruned %d unused images on host %s, freed %d bytes",
                     deleted_count,
-                    host.name,
+                    host.alias,
                     space_freed,
                 )
             except docker.errors.APIError as exc:
@@ -368,7 +368,7 @@ def _do_delete(job_id: str) -> None:
                         logger.warning(
                             "Image %s not found for deletion on host %s",
                             image_ref,
-                            host.name,
+                            host.alias,
                         )
                         progress = {
                             "status": "warning",
@@ -392,7 +392,7 @@ def _do_delete(job_id: str) -> None:
                     logger.info(
                         "Deleted image %s on host %s (size: %d bytes)",
                         image_ref,
-                        host.name,
+                        host.alias,
                         image_size,
                     )
 
@@ -432,7 +432,7 @@ def _do_delete(job_id: str) -> None:
             job.id,
             deleted_count,
             space_freed,
-            host.name,
+            host.alias,
         )
 
     except Exception as exc:

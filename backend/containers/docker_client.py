@@ -17,13 +17,13 @@ def _resolve_base_url(host):
             detail=f'Docker connection string is empty for host "{host.name}".'
         )
 
-    if base_url.startswith('unix://') or base_url.startswith('tcp://'):
+    if base_url.startswith('unix://') or base_url.startswith('tcp://') or base_url.startswith('npipe://'):
         return base_url
 
     raise ServiceUnavailable(
         detail=(
             f'Unsupported Docker connection string for host "{host.name}": '
-            f'{base_url}. Use unix:// or tcp://.'
+            f'{base_url}. Use unix://, tcp://, or npipe://.'
         )
     )
 

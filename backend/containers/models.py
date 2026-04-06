@@ -1,5 +1,6 @@
 import uuid
 import secrets
+import sys
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -23,13 +24,18 @@ class Host(models.Model):
         Return explicit connection_string when present; otherwise derive one
         from legacy ip_address/port fields for backward compatibility.
         """
-        if self.connection_string:
-            return self.connection_string
-
-        if self.ip_address in ('localhost', '127.0.0.1'):
-            return 'unix:///var/run/docker.sock'
-
-        return f'tcp://{self.ip_address}:{self.port}'
+        conn_str = self.connection_string
+        if not conn_str:
+            if self.ip_address in ('localhost', '127.0.0.1'):
+                conn_str = 'unix:///var/run/docker.sock'
+            else:
+                conn_str = f'tcp://{self.ip_address}:{self.port}'
+                
+        # Fix for Windows: if fallback or explicit string is the default Unix socket, convert to Windows named pipe
+        if conn_str == 'unix:///var/run/docker.sock' and sys.platform == 'win32':
+            return 'npipe:////./pipe/docker_engine'
+            
+        return conn_str
 
     def __str__(self):
         return f"{self.name} ({self.ip_address}:{self.port})"

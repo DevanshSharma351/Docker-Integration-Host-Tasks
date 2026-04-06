@@ -1,9 +1,4 @@
 import { useMemo, useState } from 'react';
-import { Search, Rocket } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 
 export default function ImageGallery({ images = [], isLoading = false, error = '', onRefresh, onDeploy }) {
   const [query, setQuery] = useState('');
@@ -19,65 +14,72 @@ export default function ImageGallery({ images = [], isLoading = false, error = '
     });
   }, [images, query]);
 
-  return (
-    <Card className="border-border/70 bg-card/95">
-      <CardHeader className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-xl">Image Gallery</CardTitle>
-            <CardDescription>Browse available host images and deploy one to a new container.</CardDescription>
-          </div>
-          <Button variant="outline" onClick={onRefresh} disabled={isLoading}>
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </Button>
-        </div>
+  const statusBadgeClass = (status) => {
+    const normalized = (status || '').toLowerCase();
+    if (normalized === 'success') return 'badge-viewer';
+    return 'badge-owner';
+  };
 
-        <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
+  return (
+    <div className="empty-state" style={{ textAlign: 'left', padding: '1.2rem' }}>
+      <p className="empty-sub" style={{ marginBottom: '16px' }}>
+        Browse available host images and deploy one to a new container.
+      </p>
+
+      {/* Header Controls */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px', alignItems: 'end', marginBottom: '16px' }}>
+        <div>
+          <label className="form-label">Search Image or Source</label>
+          <input
+            className="form-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-9"
-            placeholder="Search by image reference"
-            aria-label="Search images"
+            placeholder="Search by image reference..."
           />
         </div>
-      </CardHeader>
+        <button 
+          className="btn-secondary" 
+          onClick={onRefresh} 
+          disabled={isLoading}
+          style={{ padding: '10px 14px', fontSize: '14px', width: 'auto', marginTop: 0 }}
+        >
+          {isLoading ? 'Refreshing...' : 'Refresh Registry'}
+        </button>
+      </div>
 
-      <CardContent>
-        {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
+      {error ? <p className="form-error" style={{ marginTop: '10px', marginBottom: '14px' }}>{error}</p> : null}
 
+      <div style={{ marginTop: '14px', display: 'grid', gap: '8px' }}>
         {filteredImages.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              {query ? 'No images match your search.' : 'No images available yet.'}
-            </p>
-          </div>
+          <p className="empty-sub">
+            {query ? 'No images match your search.' : 'No images available yet. Click Refresh.'}
+          </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {filteredImages.map((image) => (
-              <div key={image.image_ref} className="rounded-xl border bg-background/40 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold break-all">{image.image_ref}</p>
-                  <Badge variant="secondary" className="uppercase">{image.status || 'ready'}</Badge>
+          filteredImages.map((image) => (
+            <div key={image.image_ref} style={{ border: '1px solid #e5e5e5', borderRadius: '10px', padding: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                <div>
+                  <div className="host-name">{image.image_ref}</div>
+                  <div className="host-addr">Source: {image.source || 'local host'}</div>
+                  <span className={`host-role-badge ${statusBadgeClass(image.status)}`}>
+                    {(image.status || 'READY').toUpperCase()}
+                  </span>
                 </div>
 
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Source: {image.source || 'local host'}
-                </p>
-
-                <Button
-                  className="mt-4 w-full"
-                  onClick={() => onDeploy?.(image.image_ref)}
-                >
-                  <Rocket className="size-4" />
-                  Deploy
-                </Button>
+                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ padding: '8px 12px', fontSize: '13px', width: 'auto', marginTop: 0 }}
+                    onClick={() => onDeploy?.(image.image_ref)}
+                  >
+                    Deploy
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -27,7 +27,7 @@ urlpatterns = [
     path('api/networks/', include('networks.urls')),
     path('api/', include('containers.urls')),
     path('api/registries/', include('registries.urls')),
-    path('api/hosts/<int:host_id>/images/', include('images.urls')),
-    path('api/hosts/<int:host_id>/images/build/', ImageBuildStreamView.as_view(), name='image-build'),
-    path('api/hosts/<int:host_id>/images/inspect/', ImageInspectView.as_view(), name='image-inspect'),
+    path('api/hosts/<str:host_id>/images/', include('images.urls')),
+    path('api/hosts/<str:host_id>/images/build/', ImageBuildStreamView.as_view(), name='image-build'),
+    path('api/hosts/<str:host_id>/images/inspect/', ImageInspectView.as_view(), name='image-inspect'),
 ]

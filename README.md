@@ -1,67 +1,98 @@
 # Docker Integration Host
 
-**Docker Integration Host** is a powerful orchestration tool designed to manage multiple containers and networks across different hosts from a single, centralized interface. It aims to simplify the complexity of distributed container management, providing a unified platform for monitoring, scaling, and configuring your Docker infrastructure.
+A full-stack Docker Management Dashboard built with Django REST Framework (Backend) and React (Frontend). This application allows you to remotely manage Docker hosts, pull/push images, monitor containers, and manage role-based access controls across your infrastructure.
 
-## Features
+## Project Structure
 
-- **Single Host Management**: Orchestrate containers across multiple remote hosts.
-- **Network Orchestration**: Manage and bridge networks between different Docker environments.
-- **Centralized Control**: Unified dashboard for viewing and controlling container lifecycles.
+The repository is split into two independent modules:
+- `backend/`: Django API server providing endpoints for Docker SDK integration, database persistence, and RBAC authentication.
+- `frontend/`: React single-page application serving the dashboard UI.
 
-## Getting Started
+---
 
-### Backend Setup (Django)
+## Local Setup Guidelines
 
-The backend handles the orchestration logic, communication with remote Docker hosts, and state management.
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- Docker Engine locally installed and running (for local container management endpoints)
+- Git
 
-1. **Navigate to the backend directory:**
+### 1. Backend Setup (Django)
+
+Open your terminal and navigate to the project root:
+
+1. **Change to the backend directory**
    ```bash
    cd backend
    ```
 
-2. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+2. **Create and activate a Python virtual environment**
+   - Windows:
+     ```bash
+     python -m venv venv
+     .\venv\Scripts\activate
+     ```
+   - macOS / Linux:
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     ```
 
-3. **Install dependencies:**
+3. **Install the required dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Run database migrations:**
+4. **Run Database Migrations**
+   Initialize the SQLite database schema:
    ```bash
    python manage.py migrate
    ```
 
-5. **Start the Django development server:**
+5. **Create a Superuser** (Required to access all features & bypass RBAC limitations out-of-the-box):
+   ```bash
+   python manage.py createsuperuser
+   ```
+
+6. **Start the Development Server**
    ```bash
    python manage.py runserver
    ```
-   The backend will be running at `http://localhost:8000`.
+   *The API will be available at `http://127.0.0.1:8000/`*
 
-### Frontend Setup (Vite + React)
+---
 
-The frontend provides the user interface for managing your containers and network configurations.
+### 2. Frontend Setup (React)
 
-1. **Navigate to the frontend directory:**
+Open a **new, separate terminal tab/window** and navigate to the project root:
+
+1. **Change to the frontend directory**
    ```bash
    cd frontend
    ```
 
-2. **Install dependencies:**
+2. **Install node dependencies**
    ```bash
    npm install
    ```
 
-3. **Start the development server:**
+3. **Start the Development Server**
    ```bash
    npm run dev
    ```
-   The frontend will be running at `http://localhost:5173`.
+   *The React dashboard will be accessible at the Localhost URL provided in the terminal (usually `http://localhost:5173`).*
 
-## Architecture
+---
 
-- **Backend**: Django REST Framework
-- **Frontend**: React with Vite and Tailwind CSS
+## Post-Setup Verification
+
+1. Head to your frontend dashboard URL in the browser.
+2. Login using the Superuser credentials you just generated.
+3. **Module 1 (RBAC & Auth):** Confirm your user role functions properly, and try assigning hosts.
+4. **Module 2 (Containers):** Verify you can list, stop, and boot containers directly from your dashboard.
+5. **Module 3 (Images):** Switch over to the Images tab to pull real images from registries seamlessly using the background queue jobs!
+
+## Important Notes for Windows Users 
+
+A platform-specific handler is automatically enabled within `backend/containers/models.py`. If you define "local-docker" as your host, the Docker daemon socket transparently defaults to `npipe:////./pipe/docker_engine`, meaning everything connects naturally without Unix socket errors! Make sure Docker Desktop is open and running in the background before testing the UI.

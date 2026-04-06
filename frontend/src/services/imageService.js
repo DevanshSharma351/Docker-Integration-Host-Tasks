@@ -161,4 +161,35 @@ export const imageService = {
       }
     }
   },
+
+  async pullImage(hostId, imageRef) {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/hosts/${hostId}/images/pull/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ image_ref: imageRef })
+    });
+    if (!response.ok) throw new Error(parseErrorPayload(await response.json().catch(() => null)));
+    return await response.json();
+  },
+
+  async deleteImage(hostId, imageRef) {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/hosts/${hostId}/images/delete/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ delete_mode: 'SPECIFIC', image_refs: imageRef, force: true })
+    });
+    if (!response.ok) throw new Error(parseErrorPayload(await response.json().catch(() => null)));
+    return await response.json();
+  },
+
+  async inspectImage(hostId, imageRef) {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`${API_BASE_URL}/api/hosts/${hostId}/images/inspect/?image_ref=${encodeURIComponent(imageRef)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(parseErrorPayload(await response.json().catch(() => null)));
+    return await response.json();
+  },
 };

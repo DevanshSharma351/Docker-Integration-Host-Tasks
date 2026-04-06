@@ -40,14 +40,14 @@ def _is_local_hostname(hostname: str) -> bool:
 
 def _get_docker_client_for_host(host: Host, timeout: int):
     # Prefer local socket for localhost hosts (OrbStack / Docker Desktop on macOS)
-    if _is_local_hostname(host.hostname):
+    if _is_local_hostname(host.ip_address):
         try:
             return docker.from_env(timeout=timeout)
         except docker.errors.DockerException:
             pass
 
     return docker.DockerClient(
-        base_url=f"tcp://{host.hostname}:{host.port}",
+        base_url=f"tcp://{host.ip_address}:{host.port}",
         timeout=timeout,
     )
 
@@ -78,7 +78,7 @@ class ImagePullJobListCreateView(generics.ListCreateAPIView):
         host = self.get_host()
 
         # Check object-level permission (is user admin or host owner?)
-        if request.user.role != "admin" and host.owner != request.user:
+        if request.user.role != "admin" and host.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to pull images on this host."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -103,7 +103,7 @@ class ImagePullJobListCreateView(generics.ListCreateAPIView):
             "Image pull job created id=%s image=%s host=%s user=%s",
             job.id,
             job.image_ref,
-            host.name,
+            host.alias,
             request.user.username,
         )
 
@@ -217,7 +217,7 @@ class ImageBuildStreamView(APIView):
     def post(self, request, host_id):
         host = get_object_or_404(Host, pk=host_id)
 
-        if request.user.role != "admin" and host.owner != request.user:
+        if request.user.role != "admin" and host.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to build images on this host."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -249,7 +249,7 @@ class ImageBuildStreamView(APIView):
         except docker.errors.DockerException as exc:
             logger.error(
                 "Cannot connect to Docker daemon on host %s: %s",
-                host.name,
+                host.alias,
                 exc,
             )
             return Response(
@@ -272,16 +272,16 @@ class ImageBuildStreamView(APIView):
 
                 yield json.dumps({"status": "done", "image_id": image.id}) + "\n"
             except docker.errors.BuildError as exc:
-                logger.warning("Image build failed on host %s: %s", host.name, exc)
+                logger.warning("Image build failed on host %s: %s", host.alias, exc)
                 yield json.dumps({"error": "build_failed", "detail": str(exc)}) + "\n"
             except docker.errors.APIError as exc:
-                logger.warning("Docker API build error on host %s: %s", host.name, exc)
+                logger.warning("Docker API build error on host %s: %s", host.alias, exc)
                 yield (
                     json.dumps({"error": "docker_api_error", "detail": str(exc)})
                     + "\n"
                 )
             except Exception as exc:
-                logger.exception("Unexpected image build error on host %s", host.name)
+                logger.exception("Unexpected image build error on host %s", host.alias)
                 yield (
                     json.dumps({"error": "unexpected_error", "detail": str(exc)})
                     + "\n"
@@ -331,7 +331,7 @@ class ImageInspectView(APIView):
         except docker.errors.DockerException as exc:
             logger.error(
                 "Cannot connect to Docker daemon on host %s: %s",
-                host.name,
+                host.alias,
                 exc,
             )
             return Response(
@@ -344,14 +344,14 @@ class ImageInspectView(APIView):
             image = client.images.get(image_ref)
         except docker.errors.ImageNotFound:
             return Response(
-                {"detail": f"Image '{image_ref}' not found on host '{host.name}'."},
+                {"detail": f"Image '{image_ref}' not found on host '{host.alias}'."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         except docker.errors.APIError as exc:
             logger.error(
                 "Docker API error inspecting image %s on host %s: %s",
                 image_ref,
-                host.name,
+                host.alias,
                 exc,
             )
             return Response(
@@ -414,7 +414,7 @@ class HostImageListView(APIView):
     def get(self, request, host_id):
         host = get_object_or_404(Host, pk=host_id)
 
-        if request.user.role != "admin" and host.owner != request.user:
+        if request.user.role != "admin" and host.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to list images on this host."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -425,7 +425,7 @@ class HostImageListView(APIView):
         except docker.errors.DockerException as exc:
             logger.error(
                 "Cannot connect to Docker daemon on host %s: %s",
-                host.name,
+                host.alias,
                 exc,
             )
             return Response(
@@ -438,7 +438,7 @@ class HostImageListView(APIView):
         except docker.errors.APIError as exc:
             logger.error(
                 "Docker API error listing images on host %s: %s",
-                host.name,
+                host.alias,
                 exc,
             )
             return Response(
@@ -498,7 +498,7 @@ class ImagePushJobListCreateView(generics.ListCreateAPIView):
         host = self.get_host()
 
         # Check object-level permission (is user admin or host owner?)
-        if request.user.role != "admin" and host.owner != request.user:
+        if request.user.role != "admin" and host.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to push images on this host."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -525,7 +525,7 @@ class ImagePushJobListCreateView(generics.ListCreateAPIView):
             job.id,
             job.source_image_ref,
             job.target_image_ref,
-            host.name,
+            host.alias,
             request.user.username,
         )
 
@@ -613,7 +613,7 @@ class ImageDeleteJobListCreateView(generics.ListCreateAPIView):
         host = self.get_host()
 
         # Check object-level permission (is user admin or host owner?)
-        if request.user.role != "admin" and host.owner != request.user:
+        if request.user.role != "admin" and host.created_by != request.user:
             return Response(
                 {"detail": "You do not have permission to delete images on this host."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -636,7 +636,7 @@ class ImageDeleteJobListCreateView(generics.ListCreateAPIView):
             "Image delete job created id=%s mode=%s host=%s user=%s",
             job.id,
             job.delete_mode,
-            host.name,
+            host.alias,
             request.user.username,
         )
 
