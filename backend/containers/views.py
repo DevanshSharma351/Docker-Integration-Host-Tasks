@@ -17,6 +17,13 @@ from containers.serializers import (
     ContainerStatsSerializer,
     ExecTicketResponseSerializer,
 )
+from hosts.models import Host as AccessHost
+
+
+def _connection_string_for_access_host(host):
+    if host.ip_address in ('127.0.0.1', 'localhost', '::1'):
+        return 'unix:///var/run/docker.sock'
+    return f'tcp://{host.ip_address}:{host.port}'
 
 
 class ContainerListCreateView(APIView):
@@ -29,6 +36,8 @@ class ContainerListCreateView(APIView):
         qs = ContainerRecord.objects.filter(host=host)
         if status_filter:
             qs = qs.filter(status=status_filter.upper())
+        else:
+            qs = qs.exclude(status=ContainerRecord.Status.REMOVED)
 
         serializer = ContainerRecordListSerializer(qs, many=True)
         return Response({"count": qs.count(), "results": serializer.data})
@@ -283,3 +292,38 @@ class ContainerHostBootstrapView(APIView):
         )
 
         return Response(HostSerializer(host).data, status=status.HTTP_200_OK)
+
+
+class ContainerHostResolveView(APIView):
+    @require_auth
+    def post(self, request, access_host_id):
+        access_host = get_object_or_404(AccessHost, pk=access_host_id)
+
+        host, created = Host.objects.get_or_create(
+            ip_address=access_host.ip_address,
+            port=access_host.port,
+            defaults={
+                'name': access_host.alias,
+                'connection_string': _connection_string_for_access_host(access_host),
+            },
+        )
+
+        if not created:
+            updates = {}
+            if host.name != access_host.alias:
+                updates['name'] = access_host.alias
+            resolved_conn = _connection_string_for_access_host(access_host)
+            if host.connection_string != resolved_conn:
+                updates['connection_string'] = resolved_conn
+            if updates:
+                for field, value in updates.items():
+                    setattr(host, field, value)
+                host.save(update_fields=list(updates.keys()))
+
+        return Response(
+            {
+                'container_host': HostSerializer(host).data,
+                'source_host_id': str(access_host.id),
+            },
+            status=status.HTTP_200_OK,
+        )

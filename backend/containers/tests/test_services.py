@@ -237,6 +237,37 @@ class TestSyncRecords:
         assert event.status == 'FAILED'
         assert event.error_message is not None
 
+    def test_sync_host_records_discovers_daemon_containers(
+        self, db, running_container, mock_docker
+    ):
+        sdk_container = MagicMock()
+        sdk_container.id = 'sha256daemon'
+        sdk_container.name = 'daemon-nginx'
+        sdk_container.attrs = {
+            'State': {'Status': 'running'},
+            'Config': {'Image': 'nginx:alpine'},
+        }
+        sdk_container.reload.return_value = None
+        mock_docker.containers.list.return_value = [sdk_container]
+
+        services.sync_host_records(running_container.host)
+
+        discovered = ContainerRecord.objects.get(container_id='sha256daemon')
+        assert discovered.host == running_container.host
+        assert discovered.name == 'daemon-nginx'
+        assert discovered.image_ref == 'nginx:alpine'
+        assert discovered.status == ContainerRecord.Status.RUNNING
+
+    def test_sync_host_records_marks_missing_containers_removed(
+        self, db, running_container, mock_docker
+    ):
+        mock_docker.containers.list.return_value = []
+
+        services.sync_host_records(running_container.host)
+
+        running_container.refresh_from_db()
+        assert running_container.status == ContainerRecord.Status.REMOVED
+
 class TestGetContainerStats:
 
     @pytest.fixture

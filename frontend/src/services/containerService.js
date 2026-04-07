@@ -20,6 +20,15 @@ export const containerService = {
     }
   },
 
+  async resolveContainerHost(accessHostId) {
+    try {
+      const response = await api.post(`/containers/hosts/resolve/${accessHostId}/`);
+      return response.data;
+    } catch (error) {
+      throw new Error(normalizeError(error, 'Failed to resolve selected host for containers'));
+    }
+  },
+
   async listContainers(hostId, status = '') {
     try {
       const query = status ? `?status=${encodeURIComponent(status)}` : '';

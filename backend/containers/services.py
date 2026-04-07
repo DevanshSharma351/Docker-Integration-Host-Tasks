@@ -73,10 +73,43 @@ def sync_record_with_docker(record):
 
 
 def sync_host_records(host):
-    for record in ContainerRecord.objects.filter(host=host).exclude(
-        status=ContainerRecord.Status.REMOVED
+    try:
+        client = get_docker_client(host)
+        sdk_containers = client.containers.list(all=True)
+    except (
+        docker.errors.APIError,
+        docker.errors.DockerException,
+        ServiceUnavailable,
     ):
-        sync_record_with_docker(record)
+        return
+
+    seen_ids = set()
+
+    for sdk_container in sdk_containers:
+        sdk_container.reload()
+        state_status = (sdk_container.attrs.get('State') or {}).get('Status')
+        resolved_status = _map_docker_state_to_record_status(state_status)
+        image_ref = (
+            (sdk_container.attrs.get('Config') or {}).get('Image')
+            or ''
+        )
+
+        ContainerRecord.objects.update_or_create(
+            container_id=sdk_container.id,
+            defaults={
+                'host': host,
+                'name': sdk_container.name,
+                'image_ref': image_ref,
+                'status': resolved_status,
+            },
+        )
+        seen_ids.add(sdk_container.id)
+
+    # Mark records that no longer exist on daemon as removed.
+    stale_qs = ContainerRecord.objects.filter(host=host).exclude(
+        container_id__in=seen_ids
+    ).exclude(status=ContainerRecord.Status.REMOVED)
+    stale_qs.update(status=ContainerRecord.Status.REMOVED)
 
 def create_container(host, user, image_ref, name, environment,
                      port_bindings, volumes, command=''):
@@ -98,13 +131,23 @@ def create_container(host, user, image_ref, name, environment,
         sdk_container = client.containers.run(
             **run_kwargs
         )
+
+        # Reflect the daemon-reported runtime state rather than assuming
+        # every created container is running.
+        sdk_container.reload()
+        state_status = (sdk_container.attrs.get('State') or {}).get('Status')
+        if isinstance(state_status, str) and state_status.strip():
+            resolved_status = _map_docker_state_to_record_status(state_status)
+        else:
+            resolved_status = ContainerRecord.Status.RUNNING
+
         record = ContainerRecord.objects.create(
             host=host,
             created_by=user,
             container_id=sdk_container.id,
             name=name,
             image_ref=image_ref,
-            status=ContainerRecord.Status.RUNNING,
+            status=resolved_status,
             port_bindings=port_bindings,
             environment=environment,
             volumes=volumes,

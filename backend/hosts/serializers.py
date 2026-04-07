@@ -48,6 +48,26 @@ class HostCreateSerializer(serializers.ModelSerializer):
         fields = ['alias', 'ip_address', 'port', 'ssh_credentials']
         extra_kwargs = {'ssh_credentials': {'write_only': True}}
 
+    def validate(self, attrs):
+        ip_address = attrs.get('ip_address')
+        port = attrs.get('port')
+
+        qs = Host.objects.filter(ip_address=ip_address, port=port)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        if qs.exists():
+            raise serializers.ValidationError(
+                {
+                    'ip_address': (
+                        'A host with this IP and port already exists. '
+                        'Use the existing host instead of creating a duplicate.'
+                    )
+                }
+            )
+
+        return attrs
+
     def create(self, validated_data):
         request = self.context.get('request')
         validated_data['created_by'] = request.user

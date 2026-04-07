@@ -1,6 +1,7 @@
 from django.urls import path
 from containers.views import (
     ContainerHostBootstrapView,
+    ContainerHostResolveView,
     ContainerListCreateView,
     ContainerDetailView,
     ContainerStartView,
@@ -21,6 +22,10 @@ urlpatterns = [
     path(
         'containers/hosts/bootstrap/',
         ContainerHostBootstrapView.as_view()
+    ),
+    path(
+        'containers/hosts/resolve/<str:access_host_id>/',
+        ContainerHostResolveView.as_view()
     ),
     path(
         'hosts/<int:host_id>/containers/',

@@ -62,7 +62,11 @@ class TestContainerListCreateView:
     def test_list_returns_200(self, client, db, host, container_record, mock_docker):
         sdk_mock = MagicMock()
         sdk_mock.attrs = {'State': {'Status': 'running'}}
-        mock_docker.containers.get.return_value = sdk_mock
+        sdk_mock.id = container_record.container_id
+        sdk_mock.name = container_record.name
+        sdk_mock.reload.return_value = None
+        sdk_mock.attrs['Config'] = {'Image': container_record.image_ref}
+        mock_docker.containers.list.return_value = [sdk_mock]
         response = client.get(f'/api/hosts/{host.id}/containers/')
         assert response.status_code == 200
 
@@ -71,7 +75,11 @@ class TestContainerListCreateView:
     ):
         sdk_mock = MagicMock()
         sdk_mock.attrs = {'State': {'Status': 'running'}}
-        mock_docker.containers.get.return_value = sdk_mock
+        sdk_mock.id = container_record.container_id
+        sdk_mock.name = container_record.name
+        sdk_mock.reload.return_value = None
+        sdk_mock.attrs['Config'] = {'Image': container_record.image_ref}
+        mock_docker.containers.list.return_value = [sdk_mock]
         response = client.get(f'/api/hosts/{host.id}/containers/')
         assert response.data['count'] == 1
         assert response.data['results'][0]['name'] == 'view-test-nginx'
@@ -81,7 +89,11 @@ class TestContainerListCreateView:
     ):
         sdk_mock = MagicMock()
         sdk_mock.attrs = {'State': {'Status': 'running'}}
-        mock_docker.containers.get.return_value = sdk_mock
+        sdk_mock.id = container_record.container_id
+        sdk_mock.name = container_record.name
+        sdk_mock.reload.return_value = None
+        sdk_mock.attrs['Config'] = {'Image': container_record.image_ref}
+        mock_docker.containers.list.return_value = [sdk_mock]
         response = client.get(
             f'/api/hosts/{host.id}/containers/?status=running'
         )
@@ -91,6 +103,23 @@ class TestContainerListCreateView:
             f'/api/hosts/{host.id}/containers/?status=stopped'
         )
         assert response.data['count'] == 0
+
+    def test_list_hides_removed_records_by_default(
+        self, client, db, host, container_record, mock_docker
+    ):
+        # Daemon no longer has the container, so sync marks it REMOVED.
+        mock_docker.containers.list.return_value = []
+
+        response = client.get(f'/api/hosts/{host.id}/containers/')
+
+        assert response.status_code == 200
+        assert response.data['count'] == 0
+
+        response_removed = client.get(
+            f'/api/hosts/{host.id}/containers/?status=removed'
+        )
+        assert response_removed.status_code == 200
+        assert response_removed.data['count'] == 1
 
     def test_list_returns_404_for_unknown_host(self, client, db):
         response = client.get('/api/hosts/99999/containers/')

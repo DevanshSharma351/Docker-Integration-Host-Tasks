@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [emptyStateError, setEmptyStateError] = useState('');
   const [creatingLocalHost, setCreatingLocalHost] = useState(false);
-  const [containerHostId, setContainerHostId] = useState('1');
+  const [containerHostId, setContainerHostId] = useState('');
   const [containers, setContainers] = useState([]);
   const [containersLoading, setContainersLoading] = useState(false);
   const [containerError, setContainerError] = useState('');
@@ -103,7 +103,11 @@ export default function DashboardPage() {
       try {
         const [meRes, hostsRes] = await Promise.all([getMe(), getHosts()]);
         setUser(meRes.data);
-        setHosts(hostsRes.data);
+        const nextHosts = hostsRes.data || [];
+        setHosts(nextHosts);
+        if (nextHosts.length > 0) {
+          setSelectedHostId((prev) => prev || nextHosts[0].id);
+        }
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       } finally {
@@ -133,6 +137,29 @@ export default function DashboardPage() {
       node.scrollTop = node.scrollHeight;
     });
   }, [terminalLinesByContainer]);
+
+  useEffect(() => {
+    const resolveSelectedHost = async () => {
+      if (!selectedHostId) {
+        setContainerHostId('');
+        setContainers([]);
+        return;
+      }
+
+      setContainerError('');
+      try {
+        const payload = await containerService.resolveContainerHost(selectedHostId);
+        const resolvedId = String(payload?.container_host?.id || '');
+        setContainerHostId(resolvedId);
+      } catch (err) {
+        setContainerHostId('');
+        setContainers([]);
+        setContainerError(err.message);
+      }
+    };
+
+    resolveSelectedHost();
+  }, [selectedHostId]);
 
   const createLocalHost = async () => {
     if (creatingLocalHost) return;
@@ -166,8 +193,9 @@ export default function DashboardPage() {
     setBootstrapLoading(true);
     try {
       const host = await containerService.bootstrapLocalHost();
-      setContainerHostId(String(host.id));
-      await loadContainers();
+      const nextHostId = String(host.id);
+      setContainerHostId(nextHostId);
+      await loadContainers(nextHostId);
     } catch (err) {
       setContainerError(err.message);
     } finally {
@@ -175,11 +203,17 @@ export default function DashboardPage() {
     }
   };
 
-  const loadContainers = async () => {
+  const loadContainers = async (explicitHostId) => {
+    const targetHostId = String(explicitHostId || containerHostId || '');
+    if (!targetHostId) {
+      setContainers([]);
+      return;
+    }
+
     setContainerError('');
     setContainersLoading(true);
     try {
-      const data = await containerService.listContainers(containerHostId, statusFilter);
+      const data = await containerService.listContainers(targetHostId, statusFilter);
       setContainers(data.results || []);
     } catch (err) {
       setContainers([]);
@@ -188,6 +222,11 @@ export default function DashboardPage() {
       setContainersLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!containerHostId) return;
+    loadContainers(containerHostId);
+  }, [containerHostId, statusFilter]);
 
   const handleCreateContainer = async () => {
     if (!createImageRef.trim()) {
@@ -550,12 +589,12 @@ export default function DashboardPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '120px 120px 1fr 1fr auto auto', gap: '8px', alignItems: 'end' }}>
               <div>
-                <label className="form-label">Host ID</label>
+                <label className="form-label">Resolved Host ID</label>
                 <input
                   className="form-input"
                   value={containerHostId}
-                  onChange={(e) => setContainerHostId(e.target.value)}
-                  placeholder="1"
+                  readOnly
+                  placeholder="Select a host above"
                 />
               </div>
 
